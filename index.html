@@ -15,7 +15,7 @@ label{display:block;font-weight:650;margin:8px 0 4px}.row{display:grid;grid-temp
 button{border:0;border-radius:8px;padding:10px 14px;cursor:pointer}.danger{background:#fee2e2}.primary{background:#111827;color:#fff}
 details{background:#fff;margin:7px 0;padding:12px;border-radius:9px}table{width:100%;border-collapse:collapse}
 th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}.tablewrap{overflow:auto}canvas{width:100%;height:220px}
-#auth{max-width:520px;margin:50px auto}.hidden{display:none!important}.status{padding:10px;border-radius:8px;margin:10px 0;background:#f3f4f6}
+#auth{max-width:520px;margin:50px auto}.hidden{display:none!important}.status{padding:10px;border-radius:8px;margin:10px 0;background:#f3f4f6}.chat{height:520px;display:flex;flex-direction:column;gap:10px}.chatbox{flex:1;overflow:auto;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px}.msg{max-width:86%;padding:10px 12px;border-radius:12px;margin:7px 0;white-space:pre-wrap;line-height:1.45}.msg.user{margin-left:auto;background:#111827;color:#fff}.msg.assistant{background:#e5e7eb;color:#111827}.chatbar{display:flex;gap:8px}.chatbar textarea{resize:none;min-height:48px}.chatbar button{white-space:nowrap}.chattools{display:flex;gap:8px;flex-wrap:wrap}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -68,7 +68,7 @@ th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}.tablewrap{overfl
 <section id="f" class="panel card"><h2>Feedback semanal</h2><form id="fb"><div class="row"><div><label>Semana</label><select id="fw"></select></div><div><label>Treinos</label><input id="fr" type="number"></div><div><label>Maior contínuo</label><input id="fc" type="number" step=".1"></div></div><label>Observações</label><textarea id="fn"></textarea><br><button class="primary">Salvar feedback</button></form><pre id="sum"></pre></section>
 
 <section id="g" class="panel card"><h2>☁️ Google Sheets</h2><p class="muted">A integração com Google Sheets ficará como backup opcional. O banco principal agora é o Supabase.</p></section>
-<section id="ai" class="panel card"><h2>🧠 Treinador IA</h2><p>Esta aba será conectada ao treinador por IA na próxima etapa. Ela poderá receber seu feedback semanal e consultar automaticamente seu histórico.</p><div class="status">Banco e login já estão preparados para essa integração.</div></section>
+<section id="ai" class="panel card"><h2>🧠 Treinador IA</h2><p class="muted">Converse com seu treinador. Ele consulta automaticamente seus treinos e feedbacks salvos no Meu 5K.</p><div class="chattools"><button id="newChat" type="button">＋ Nova conversa</button><button id="askFeedback" type="button">📋 Analisar meu feedback</button></div><div class="chat"><div id="chatbox" class="chatbox"><div class="msg assistant">Olá! Sou seu treinador do Meu 5K. Posso analisar seus treinos, recuperação, panturrilha, respiração e feedback semanal. O que você gostaria de saber?</div></div><div class="chatbar"><textarea id="chatInput" placeholder="Ex.: Como foi minha última semana? Posso avançar no plano?"></textarea><button id="sendChat" class="primary" type="button">Enviar</button></div><div id="chatStatus" class="muted"></div></div></section>
 </section>
 </main>
 <script>
@@ -76,7 +76,7 @@ const SUPABASE_URL="https://cjusebuzzyyaobsboccg.supabase.co";
 const SUPABASE_KEY="sb_publishable_mn-TVED7wp_FVKoKnCTUKQ_pC7dYcxO";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const plan=["1 min corrida + 2 min caminhada ×8","1 min corrida + 2 min caminhada ×8","2 min corrida + 2 min caminhada ×7","2 min corrida + 2 min caminhada ×7","3 min corrida + 2 min caminhada ×6","3 min corrida + 2 min caminhada ×6","2–3 min corrida + 2 min caminhada ×6","5 min corrida + 2 min caminhada ×4","6–8 min corrida + 2 min caminhada ×3","10 min corrida + 2 min caminhada ×2","15–20 min corrida contínua fácil","20–30 min corrida contínua fácil / run-walk"];
-let runs=[],feedbacks=[],editing=false,user=null;
+let runs=[],feedbacks=[],editing=false,user=null,currentConversationId=null;
 const $=id=>document.getElementById(id),today=()=>new Date().toISOString().slice(0,10);
 for(let i=1;i<=12;i++){ $("week").innerHTML+=`<option>${i}</option>`; $("fw").innerHTML+=`<option>${i}</option>`;}
 $("date").value=today();
@@ -99,6 +99,26 @@ async function migrateLocal(){
  if(!error)localStorage.removeItem("meu5k_runs");
  if(!error)await loadData();
 }
+async function loadChat(conversationId=null){
+ currentConversationId=conversationId; const box=$("chatbox"); box.innerHTML="";
+ if(!conversationId){box.innerHTML='<div class="msg assistant">Olá! Sou seu treinador do Meu 5K. Posso analisar seus treinos, recuperação, panturrilha, respiração e feedback semanal. O que você gostaria de saber?</div>';return;}
+ const {data,error}=await sb.from("ai_messages").select("role,content,created_at").eq("conversation_id",conversationId).order("created_at",{ascending:true});
+ if(error){box.innerHTML='<div class="msg assistant">Não consegui carregar esta conversa.</div>';return;}
+ (data||[]).forEach(m=>appendChat(m.role,m.content)); box.scrollTop=box.scrollHeight;
+}
+function appendChat(role,text){const d=document.createElement("div");d.className="msg "+role;d.textContent=text;$("chatbox").appendChild(d);$("chatbox").scrollTop=$("chatbox").scrollHeight;}
+async function sendChatMessage(text){
+ text=(text||$("chatInput").value).trim(); if(!text)return; $("chatInput").value=""; appendChat("user",text); $("sendChat").disabled=true; $("chatStatus").textContent="Treinador analisando seus dados…";
+ const {data,error}=await sb.functions.invoke("ai-coach",{body:{message:text,conversationId:currentConversationId}});
+ $("sendChat").disabled=false; $("chatStatus").textContent="";
+ if(error){appendChat("assistant","Não foi possível falar com o treinador agora. "+(error.message||"Tente novamente."));return;}
+ if(data?.conversationId)currentConversationId=data.conversationId; if(data?.answer)appendChat("assistant",data.answer); else appendChat("assistant","Não recebi uma resposta válida da IA.");
+}
+$("sendChat").onclick=()=>sendChatMessage();
+$("chatInput").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChatMessage();}});
+$("newChat").onclick=()=>loadChat(null);
+$("askFeedback").onclick=()=>{const w=+$("fw").value;const f=feedbacks.find(x=>+x.week===w);const prompt=f?"Analise meu feedback da semana "+w+" e diga o que ele sugere sobre minha recuperação e sobre a próxima sessão. Feedback: "+(f.notes||"sem observações")+". Os treinos registrados também estão disponíveis para você.":"Analise meus dados recentes e me diga como foi minha evolução. Não encontrei um feedback salvo para a semana "+w+".";sendChatMessage(prompt);};
+
 function render(){
  const km=runs.reduce((a,x)=>a+(+x.distance_km||0),0),mc=Math.max(0,...runs.map(x=>+x.continuous_min||0));
  const ws=[...new Set(runs.map(x=>+x.week))];
