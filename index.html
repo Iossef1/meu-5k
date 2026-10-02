@@ -121,10 +121,9 @@ function buildPlan(p){
   const out=[];
   const phase1=Math.max(1,Math.ceil(weeks*.25)), phase4=Math.max(1,Math.ceil(weeks*.10));
   const phase3End=Math.max(phase1+1,weeks-phase4);
-  const progress=(w-1)/Math.max(1,weeks-1);
-  const maxContinuous=Math.max(8,Math.min(minutes, target<=3?Math.round(8+progress*12):target<=5?Math.round(10+progress*20):Math.round(12+progress*35)));
   for(let w=1;w<=weeks;w++){
     const pct=(w-1)/Math.max(1,weeks-1);
+    const maxContinuous=Math.max(8,Math.min(minutes, target<=3?Math.round(8+pct*12):target<=5?Math.round(10+pct*20):Math.round(12+pct*35)));
     const recovery=w===1||w%4===0;
     for(let d=0;d<days;d++){
       const code=String.fromCharCode(65+d), day=available[d]||"Dia disponível";
