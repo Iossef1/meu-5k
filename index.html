@@ -115,14 +115,18 @@ function buildPlan(p){
   const days=Math.max(1,Math.min(5,+p.training_days_per_week||3));
   const minutes=Math.max(15,Math.min(240,+p.available_minutes_per_session||45));
   const target=Math.max(.5,Math.min(100,+p.target_distance_km||5));
-  const exp=p.running_experience||"Iniciante";\n  const focus=p.training_focus||"resistencia";\n  const style=p.plan_style||"progressivo";\n  const specific=p.specific_workout||"livre";
+  const exp=p.running_experience||"Iniciante";
+  const focus=p.training_focus||"resistencia";
+  const style=p.plan_style||"progressivo";
+  const specific=p.specific_workout||"livre";
   const beginner=exp==="Nunca corri"||exp==="Iniciante";
   const available=Array.isArray(p.available_days)?p.available_days:[];
   const out=[];
   const phase1=Math.max(1,Math.ceil(weeks*.25)), phase4=Math.max(1,Math.ceil(weeks*.10));
   const phase3End=Math.max(phase1+1,weeks-phase4);
   for(let w=1;w<=weeks;w++){
-    const basePct=(w-1)/Math.max(1,weeks-1);\n    const pct=Math.max(0,Math.min(1,style==="conservador"?basePct*.82:style==="performance"?Math.min(1,basePct*1.12):basePct));
+    const basePct=(w-1)/Math.max(1,weeks-1);
+    const pct=Math.max(0,Math.min(1,style==="conservador"?basePct*.82:style==="performance"?Math.min(1,basePct*1.12):basePct));
     const maxContinuous=Math.max(8,Math.min(minutes, target<=3?Math.round(8+pct*12):target<=5?Math.round(10+pct*20):Math.round(12+pct*35)));
     const recovery=w===1||w%4===0;
     for(let d=0;d<days;d++){
@@ -141,11 +145,16 @@ function buildPlan(p){
       }else if(d===1){
         const effort=Math.max(1,Math.round((beginner?1:2)+pct*(beginner?2:4)));
         const reps=Math.max(4,Math.min(10,Math.floor(cap/(effort+2))));
-        main="Aquecimento fácil + "+effort+" min de esforço controlado / 2 min fácil ×"+reps;\n        if(specific==="intervalado") main="Aquecimento + "+Math.max(1,effort)+" min forte controlado / 2 min fácil ×"+reps;\n        if(specific==="tempo") main="Aquecimento + "+Math.max(5,Math.round(cap*.35))+" min em ritmo controlado + corrida fácil até completar o tempo";
+        main="Aquecimento fácil + "+effort+" min de esforço controlado / 2 min fácil ×"+reps;
+        if(specific==="intervalado") main="Aquecimento + "+Math.max(1,effort)+" min forte controlado / 2 min fácil ×"+reps;
+        if(specific==="tempo") main="Aquecimento + "+Math.max(5,Math.round(cap*.35))+" min em ritmo controlado + corrida fácil até completar o tempo";
         type="Variação de ritmo";
       }else if(d===2){
         const long=Math.max(12,Math.min(minutes,Math.round((beginner?12:18)+pct*(Math.min(minutes,(target<=5?35:60))-(beginner?12:18)))));
-        main=target<=3?long+" min fáceis, podendo usar corrida/caminhada":target<=5?long+" min fáceis, aproximando-se gradualmente da corrida contínua":long+" min fáceis, com foco em aumentar a resistência";\n        if(specific==="longao") main=long+" min de corrida longa confortável, sem buscar velocidade";\n        if(specific==="continuo") main=long+" min de corrida contínua confortável; reduza o ritmo se necessário";\n        if(specific==="runwalk") main=Math.max(2,Math.round(long*.25))+" min corrida + 2 min caminhada, repetindo até completar "+long+" min";
+        main=target<=3?long+" min fáceis, podendo usar corrida/caminhada":target<=5?long+" min fáceis, aproximando-se gradualmente da corrida contínua":long+" min fáceis, com foco em aumentar a resistência";
+        if(specific==="longao") main=long+" min de corrida longa confortável, sem buscar velocidade";
+        if(specific==="continuo") main=long+" min de corrida contínua confortável; reduza o ritmo se necessário";
+        if(specific==="runwalk") main=Math.max(2,Math.round(long*.25))+" min corrida + 2 min caminhada, repetindo até completar "+long+" min";
         type="Treino longo";
       }else{
         const easy=Math.max(15,Math.min(minutes,Math.round(18+minutes*.35*pct)));
@@ -238,8 +247,14 @@ $("cancelEdit").onclick=clearRunForm;$("profileForm").onsubmit=async e=>{e.preve
 $("runForm").onsubmit=async e=>{e.preventDefault();const data={user_id:user.id,date:$("date").value,week:+$("week").value,session:$("ses").value,distance_km:$("dist").value?+$("dist").value:null,total_time_min:$("time").value?+$("time").value:null,continuous_min:$("cont").value?+$("cont").value:null,calf:$("calf").value!==""?+$("calf").value:null,breathing:$("breath").value!==""?+$("breath").value:null,recovery:$("rec").value,notes:$("notes").value||null};
  let res=editing?await sb.from("runs").update(data).eq("id",$("runId").value):await sb.from("runs").insert(data);
  if(res.error)alert(res.error.message);else{await loadData();clearRunForm();alert(editing?"Treino atualizado!":"Treino salvo!")}};
-$("fb").onsubmit=async e=>{e.preventDefault();const data={user_id:user.id,week:+$("fw").value,runs_count:$("fr").value?+$("fr").value:null,max_continuous:$("fc").value?+$("fc").value:null,notes:$("fn").value||null};const old=feedbacks.find(x=>x.week===data.week);const res=old?await sb.from("weekly_feedback").update(data).eq("id",old.id):await sb.from("weekly_feedback").insert(data);if(res.error)alert(res.error.message);else{await loadData();$("sum").textContent="Semana "+data.week+" salva.\nTreinos: "+(data.runs_count??"")+"\nMaior contínuo: "+(data.max_continuous??"")+" min\n\n"+(data.notes||"");}};
-$("csv").onclick=()=>{const csv="data,semana,sessao,km,tempo,continuo,panturrilha,respiracao,recuperacao,observacoes\n"+runs.map(x=>[x.date,x.week,x.session,x.distance_km,x.total_time_min,x.continuous_min,x.calf,x.breathing,x.recovery,JSON.stringify(x.notes||"")].join(",")).join("\n");download("meu-5k.csv",csv,"text/csv")};
+$("fb").onsubmit=async e=>{e.preventDefault();const data={user_id:user.id,week:+$("fw").value,runs_count:$("fr").value?+$("fr").value:null,max_continuous:$("fc").value?+$("fc").value:null,notes:$("fn").value||null};const old=feedbacks.find(x=>x.week===data.week);const res=old?await sb.from("weekly_feedback").update(data).eq("id",old.id):await sb.from("weekly_feedback").insert(data);if(res.error)alert(res.error.message);else{await loadData();$("sum").textContent="Semana "+data.week+" salva.
+Treinos: "+(data.runs_count??"")+"
+Maior contínuo: "+(data.max_continuous??"")+" min
+
+"+(data.notes||"");}};
+$("csv").onclick=()=>{const csv="data,semana,sessao,km,tempo,continuo,panturrilha,respiracao,recuperacao,observacoes
+"+runs.map(x=>[x.date,x.week,x.session,x.distance_km,x.total_time_min,x.continuous_min,x.calf,x.breathing,x.recovery,JSON.stringify(x.notes||"")].join(",")).join("
+");download("meu-5k.csv",csv,"text/csv")};
 $("bak").onclick=()=>download("meu-5k-backup.json",JSON.stringify(runs,null,2),"application/json");
 function download(n,s,t){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([s],{type:t}));a.download=n;a.click()}
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));$(b.dataset.t).classList.add("active");if(b.dataset.t==="home")drawCharts()});
