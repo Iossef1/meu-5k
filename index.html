@@ -247,14 +247,8 @@ $("cancelEdit").onclick=clearRunForm;$("profileForm").onsubmit=async e=>{e.preve
 $("runForm").onsubmit=async e=>{e.preventDefault();const data={user_id:user.id,date:$("date").value,week:+$("week").value,session:$("ses").value,distance_km:$("dist").value?+$("dist").value:null,total_time_min:$("time").value?+$("time").value:null,continuous_min:$("cont").value?+$("cont").value:null,calf:$("calf").value!==""?+$("calf").value:null,breathing:$("breath").value!==""?+$("breath").value:null,recovery:$("rec").value,notes:$("notes").value||null};
  let res=editing?await sb.from("runs").update(data).eq("id",$("runId").value):await sb.from("runs").insert(data);
  if(res.error)alert(res.error.message);else{await loadData();clearRunForm();alert(editing?"Treino atualizado!":"Treino salvo!")}};
-$("fb").onsubmit=async e=>{e.preventDefault();const data={user_id:user.id,week:+$("fw").value,runs_count:$("fr").value?+$("fr").value:null,max_continuous:$("fc").value?+$("fc").value:null,notes:$("fn").value||null};const old=feedbacks.find(x=>x.week===data.week);const res=old?await sb.from("weekly_feedback").update(data).eq("id",old.id):await sb.from("weekly_feedback").insert(data);if(res.error)alert(res.error.message);else{await loadData();$("sum").textContent="Semana "+data.week+" salva.
-Treinos: "+(data.runs_count??"")+"
-Maior contínuo: "+(data.max_continuous??"")+" min
-
-"+(data.notes||"");}};
-$("csv").onclick=()=>{const csv="data,semana,sessao,km,tempo,continuo,panturrilha,respiracao,recuperacao,observacoes
-"+runs.map(x=>[x.date,x.week,x.session,x.distance_km,x.total_time_min,x.continuous_min,x.calf,x.breathing,x.recovery,JSON.stringify(x.notes||"")].join(",")).join("
-");download("meu-5k.csv",csv,"text/csv")};
+$("fb").onsubmit=async e=>{e.preventDefault();const data={user_id:user.id,week:+$("fw").value,runs_count:$("fr").value?+$("fr").value:null,max_continuous:$("fc").value?+$("fc").value:null,notes:$("fn").value||null};const old=feedbacks.find(x=>x.week===data.week);const res=old?await sb.from("weekly_feedback").update(data).eq("id",old.id):await sb.from("weekly_feedback").insert(data);if(res.error)alert(res.error.message);else{await loadData();$("sum").textContent="Semana "+data.week+" salva.\nTreinos: "+(data.runs_count??"")+"\nMaior contínuo: "+(data.max_continuous??"")+" min\n\n"+(data.notes||"");}};
+$("csv").onclick=()=>{const csv="data,semana,sessao,km,tempo,continuo,panturrilha,respiracao,recuperacao,observacoes\n"+runs.map(x=>[x.date,x.week,x.session,x.distance_km,x.total_time_min,x.continuous_min,x.calf,x.breathing,x.recovery,JSON.stringify(x.notes||"")].join(",")).join("\n");download("meu-5k.csv",csv,"text/csv")};
 $("bak").onclick=()=>download("meu-5k-backup.json",JSON.stringify(runs,null,2),"application/json");
 function download(n,s,t){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([s],{type:t}));a.download=n;a.click()}
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));$(b.dataset.t).classList.add("active");if(b.dataset.t==="home")drawCharts()});
