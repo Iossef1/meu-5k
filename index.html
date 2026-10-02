@@ -62,7 +62,7 @@ th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}.tablewrap{overfl
 <button class="primary" id="saveRun">Salvar treino</button> <button type="button" id="cancelEdit" class="hidden">Cancelar edição</button>
 </form></section>
 
-<section id="p" class="panel card"><h2>Meu plano personalizado</h2><p class="muted">O plano é construído a partir do seu perfil, objetivo, disponibilidade e evolução.</p><button id="regenPlan" class="primary" type="button">Recalcular plano</button><div id="weeks"></div></section>
+<section id="p" class="panel card"><h2>Meu plano personalizado</h2><p class="muted">O plano é construído a partir do seu perfil, objetivo, disponibilidade e evolução.</p><div class="plancontrols"><div><label>Duração do plano</label><select id="planWeeks"><option value="4">4 semanas</option><option value="6">6 semanas</option><option value="8">8 semanas</option><option value="12">12 semanas</option><option value="16">16 semanas</option><option value="20">20 semanas</option><option value="24">24 semanas</option><option value="30">30 semanas</option><option value="36">36 semanas</option><option value="52">52 semanas</option></select></div><div><button id="regenPlan" class="primary" type="button">Gerar/atualizar plano</button></div></div><p id="planSummary" class="muted"></p><div id="weeks"></div></section>
 <section id="h" class="panel card"><h2>Histórico</h2><canvas id="chart"></canvas><div class="tablewrap">
 <table><thead><tr><th>Data</th><th>Semana</th><th>Sessão</th><th>Km</th><th>Tempo</th><th>Cont.</th><th>Pant.</th><th>Resp.</th><th>Recup.</th><th>Observações</th><th>Ações</th></tr></thead><tbody id="hist"></tbody></table></div>
 <br><button id="csv">Exportar CSV</button> <button id="bak">Backup JSON</button></section>
