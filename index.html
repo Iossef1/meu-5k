@@ -85,7 +85,30 @@ $("date").value=today();
 
 
 function authMsg(msg){$("authStatus").textContent=msg;$("authStatus").classList.remove("hidden")}
-async function loadProfile(){const r=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle();profile=r.data||null;fillProfile();const incomplete=!profile||!profile.display_name||!profile.running_experience||!profile.goal||!profile.target_distance_km||!profile.training_days_per_week||!profile.available_minutes_per_session;if(incomplete){$("profileOnboarding").classList.remove("hidden");document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));$("profile").classList.add("active");}else{$("profileOnboarding").classList.add("hidden");}const p=await sb.from("training_plans").select("*").eq("user_id",user.id).eq("status","active").order("updated_at",{ascending:false}).limit(1);currentPlan=p.data&&p.data[0]?p.data[0]:null;if(currentPlan){const s=await sb.from("training_plan_sessions").select("*").eq("plan_id",currentPlan.id).order("week").order("sort_order");currentPlan.sessions=s.data||[]}renderPlan();}
+async function loadProfile(){
+  let r=await sb.from("profiles").select("*").eq("id",user.id).maybeSingle();
+  if(r.error){console.error("Erro ao carregar perfil:",r.error);alert("Erro ao carregar seu perfil: "+r.error.message);profile=null;return;}
+  profile=r.data||null;
+  if(!profile){
+    const ins=await sb.from("profiles").insert({id:user.id,plan_weeks:12}).select().single();
+    if(ins.error){alert("Não foi possível criar seu perfil: "+ins.error.message);return;}
+    profile=ins.data;
+  }
+  fillProfile();
+  const incomplete=!profile.display_name||!profile.running_experience||!profile.goal||!profile.target_distance_km||!profile.training_days_per_week||!profile.available_minutes_per_session;
+  if(incomplete){$("profileOnboarding").classList.remove("hidden");document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));$("profile").classList.add("active");}
+  else $("profileOnboarding").classList.add("hidden");
+  const p=await sb.from("training_plans").select("*").eq("user_id",user.id).eq("status","active").order("updated_at",{ascending:false}).limit(1);
+  if(p.error){console.error("Erro ao carregar plano:",p.error);currentPlan=null;renderPlan();return;}
+  currentPlan=p.data&&p.data[0]?p.data[0]:null;
+  if(currentPlan){
+    const s=await sb.from("training_plan_sessions").select("*").eq("plan_id",currentPlan.id).order("week").order("sort_order");
+    if(s.error){alert("Erro ao carregar as sessões do plano: "+s.error.message);currentPlan.sessions=[];}
+    else currentPlan.sessions=s.data||[];
+  }
+  renderPlan();
+  if(!incomplete && (!currentPlan || !currentPlan.sessions || !currentPlan.sessions.length)) await createPlan(profile.plan_weeks||12);
+}
 function fillProfile(){if(!profile)return;$("pf_name").value=profile.display_name||"";$("pf_age").value=profile.age||"";$("pf_sex").value=profile.sex||"";$("pf_weight").value=profile.weight_kg||"";$("pf_height").value=profile.height_cm||"";$("pf_exp").value=profile.running_experience||"Iniciante";$("pf_goal").value=profile.goal||"";$("pf_target_km").value=profile.target_distance_km||5;$("pf_target_time").value=profile.target_time_min||"";$("pf_days").value=profile.training_days_per_week||3;$("pf_minutes").value=profile.available_minutes_per_session||45;$("pf_available").value=(profile.available_days||[]).join(", ");$("pf_plan_weeks").value=profile.plan_weeks||12;$("pf_time").value=profile.preferred_training_time||"";$("pf_pain").value=profile.specific_pain||"";$("pf_conditions").value=profile.chronic_conditions||"";$("pf_medical").value=profile.medical_notes||"";}
 function buildPlan(p){
   const weeks=Math.max(1,Math.min(52,+p.plan_weeks||12));
@@ -140,21 +163,33 @@ function buildPlan(p){
   }
   return out;
 }
+let planGenerating=false;
 async function createPlan(weeksOverride){
-  if(!profile)return;
-  const weeks=Math.max(1,Math.min(52,+weeksOverride||+profile.plan_weeks||12));
-  profile.plan_weeks=weeks;
-  $("planWeeks").value=String(weeks);
-  await sb.from("profiles").update({plan_weeks:weeks,updated_at:new Date().toISOString()}).eq("id",user.id);
-  const old=currentPlan;
-  if(old){await sb.from("training_plan_sessions").delete().eq("plan_id",old.id);await sb.from("training_plans").delete().eq("id",old.id);}
-  const pr={user_id:user.id,title:"Plano personalizado — "+(profile.target_distance_km||5)+" km",goal:profile.goal||"Evoluir na corrida",target_distance_km:+profile.target_distance_km||5,target_time_min:profile.target_time_min?+profile.target_time_min:null,weeks,days_per_week:+profile.training_days_per_week||3,status:"active",generated_by:"system",notes:"Gerado a partir do perfil, disponibilidade, distância-alvo e duração escolhida."};
-  const q=await sb.from("training_plans").insert(pr).select().single();
-  if(q.error){alert(q.error.message);return false;}
-  const sessions=buildPlan(profile).map(x=>({...x,plan_id:q.data.id,user_id:user.id}));
-  const z=await sb.from("training_plan_sessions").insert(sessions);
-  if(z.error){await sb.from("training_plans").delete().eq("id",q.data.id);alert(z.error.message);return false;}
-  currentPlan=q.data;currentPlan.sessions=sessions;renderPlan();return true;
+  if(!profile||planGenerating)return false;
+  planGenerating=true;
+  try{
+    const weeks=Math.max(1,Math.min(52,+weeksOverride||+profile.plan_weeks||12));
+    profile.plan_weeks=weeks;
+    $("planWeeks").value=String(weeks);
+    const pu=await sb.from("profiles").update({plan_weeks:weeks,updated_at:new Date().toISOString()}).eq("id",user.id);
+    if(pu.error)throw new Error("Não foi possível salvar a duração do plano: "+pu.error.message);
+    const arch=await sb.from("training_plans").update({status:"archived",updated_at:new Date().toISOString()}).eq("user_id",user.id).eq("status","active");
+    if(arch.error)throw new Error("Não foi possível preparar o plano anterior: "+arch.error.message);
+    const pr={user_id:user.id,title:"Plano personalizado — "+(profile.target_distance_km||5)+" km",goal:profile.goal||"Evoluir na corrida",target_distance_km:+profile.target_distance_km||5,target_time_min:profile.target_time_min?+profile.target_time_min:null,weeks,days_per_week:+profile.training_days_per_week||3,status:"active",generated_by:"system",notes:"Gerado a partir do perfil, disponibilidade, distância-alvo e duração escolhida."};
+    const q=await sb.from("training_plans").insert(pr).select().single();
+    if(q.error)throw new Error("Não foi possível criar o plano: "+q.error.message);
+    const sessions=buildPlan(profile).map(x=>({...x,plan_id:q.data.id,user_id:user.id}));
+    if(!sessions.length)throw new Error("O gerador não produziu nenhuma sessão.");
+    const z=await sb.from("training_plan_sessions").insert(sessions);
+    if(z.error){
+      await sb.from("training_plans").delete().eq("id",q.data.id);
+      throw new Error("O plano foi criado, mas as sessões não puderam ser salvas: "+z.error.message);
+    }
+    currentPlan=q.data;currentPlan.sessions=sessions;
+    renderPlan();render();
+    return true;
+  }catch(err){console.error(err);alert(err.message||"Não foi possível gerar o plano.");return false;}
+  finally{planGenerating=false;}
 }
 function renderPlan(){const b=$("weeks");if(!b)return;if(!currentPlan){b.innerHTML="<div class='status'>Complete seu perfil para gerar o plano.</div>";return}$("planWeeks").value=String(currentPlan.weeks||12);$("planSummary").textContent=(profile?.target_distance_km||currentPlan.target_distance_km||5)+" km · "+(currentPlan.days_per_week||3)+" treinos/semana · "+(currentPlan.weeks||12)+" semanas · "+(profile?.available_minutes_per_session||45)+" min por sessão";const g={};(currentPlan.sessions||[]).forEach(s=>(g[s.week]??=[]).push(s));b.innerHTML=Object.keys(g).map(w=>"<details><summary>Semana "+w+" <span class='badge'>"+g[w].length+" treinos</span></summary>"+g[w].map(s=>"<div class='card'><b>"+s.title+"</b><p class='muted'>"+(s.scheduled_day||"Dia a definir")+" · "+s.session_type+" · até "+(s.target_duration_min||"")+" min</p><p><b>Aquecimento:</b> "+(s.warmup||"")+"</p><p><b>Principal:</b> "+(s.main_set||"")+"</p><p><b>Desaquecimento:</b> "+(s.cooldown||"")+"</p><p class='muted'>"+(s.instructions||"")+"</p></div>").join("")+"</details>").join("");}
 async function loadData(){
@@ -215,6 +250,6 @@ $("signup").onclick=async()=>{const email=$("email").value,password=$("password"
 $("reset").onclick=async()=>{const email=$("email").value;if(!email){authMsg("Informe seu e-mail primeiro.");return}const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});authMsg(error?error.message:"Enviamos as instruções de recuperação para seu e-mail.")};
 $("logout").onclick=async()=>{await sb.auth.signOut();location.reload()};
 (async()=>{const {data}=await sb.auth.getSession();if(data.session){user=data.session.user;$("auth").classList.add("hidden");$("app").classList.remove("hidden");$("userEmail").textContent=user.email;await loadData();await migrateLocal()}})();
-if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js?v=4");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js?v=5");
 </script>
 </body></html>
