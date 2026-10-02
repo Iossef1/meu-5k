@@ -145,6 +145,7 @@ async function createPlan(weeksOverride){
   const weeks=Math.max(1,Math.min(52,+weeksOverride||+profile.plan_weeks||12));
   profile.plan_weeks=weeks;
   $("planWeeks").value=String(weeks);
+  await sb.from("profiles").update({plan_weeks:weeks,updated_at:new Date().toISOString()}).eq("id",user.id);
   const old=currentPlan;
   if(old){await sb.from("training_plan_sessions").delete().eq("plan_id",old.id);await sb.from("training_plans").delete().eq("id",old.id);}
   const pr={user_id:user.id,title:"Plano personalizado — "+(profile.target_distance_km||5)+" km",goal:profile.goal||"Evoluir na corrida",target_distance_km:+profile.target_distance_km||5,target_time_min:profile.target_time_min?+profile.target_time_min:null,weeks,days_per_week:+profile.training_days_per_week||3,status:"active",generated_by:"system",notes:"Gerado a partir do perfil, disponibilidade, distância-alvo e duração escolhida."};
