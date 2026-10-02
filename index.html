@@ -309,4 +309,4 @@ $("logout").onclick=async()=>{await sb.auth.signOut();location.reload()};
 (async()=>{const {data}=await sb.auth.getSession();if(data.session){user=data.session.user;$("auth").classList.add("hidden");$("app").classList.remove("hidden");$("userEmail").textContent=user.email;await loadData();await migrateLocal()}})();
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js?v=9");
 </script>
-</body></html>
+<script src="enhancements.js?v=1"></script></body></html>
