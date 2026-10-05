@@ -54,4 +54,21 @@ function install(){
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",function(){setTimeout(install,450)});else setTimeout(install,450);
 window.addEventListener("resize",function(){if($("histSwitch"))drawHist("run")});
+/* MAOR Run foundation compatibility layer — single UI enhancement owner */
+function foundationEnhance(){
+  var run=document.getElementById("runForm");
+  if(run && !document.getElementById("foundationEnhancements")){
+    var marker=document.createElement("div"); marker.id="foundationEnhancements"; marker.style.display="none"; run.appendChild(marker);
+    function makeSelect(id){var old=document.getElementById(id);if(!old||old.tagName==="SELECT")return;var s=document.createElement("select");s.id=id;s.name=id;s.innerHTML="<option value=\"\">Não informado</option>"+[1,2,3,4,5].map(function(n){return "<option value=\""+n+"\">"+n+"</option>"}).join("");old.replaceWith(s)}
+    makeSelect("calf"); makeSelect("breath");
+    var row=document.getElementById("calf")?.closest(".row");
+    if(row&&!document.getElementById("fatigue")){var d=document.createElement("div");d.innerHTML="<label>Fadiga 0–5</label><select id=\"fatigue\"><option value=\"\">Não informado</option>"+[1,2,3,4,5].map(function(n){return "<option value=\""+n+"\">"+n+"</option>"}).join("")+"</select>";row.appendChild(d.firstElementChild)}
+  }
+  var hist=document.getElementById("hist");
+  if(hist&&window.__meu5kRuns){hist.innerHTML=window.__meu5kRuns.slice().reverse().map(function(x){return "<tr><td>"+(x.date||"")+"</td><td>"+(x.week??"")+"</td><td>"+(x.session||"")+"</td><td>"+(x.distance_km??"")+"</td><td>"+(x.total_time_min??"")+"</td><td>"+(x.continuous_min??"")+"</td><td>"+(x.calf??"—")+"</td><td>"+(x.breathing??"—")+"</td><td>"+(x.fatigue??"—")+"</td><td>"+(x.recovery||"")+"</td><td>"+(x.notes||"")+"</td><td><button onclick=\"editRun('"+x.id+"')\">Editar</button> <button class=\"danger\" onclick=\"deleteRun('"+x.id+"')\">Excluir</button></td></tr>"}).join("")}
+}
+var foundationRender=window.render;
+if(foundationRender&&!foundationRender.__foundation){var foundationWrapped=function(){foundationRender();foundationEnhance()};foundationWrapped.__foundation=true;window.render=foundationWrapped}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",function(){setTimeout(foundationEnhance,500)});else setTimeout(foundationEnhance,500);
+
 })();
