@@ -249,44 +249,20 @@ async function createPlan(weeksOverride){
   finally{planGenerating=false;}
 }
 function getCompletedSessionKeys(){return new Set((runs||[]).map(r=>String((+r.week||1)+"-"+(r.session||""))));}
-function getNextPlannedSession(){if(!currentPlan||!currentPlan.sessions)return null;const done=getCompletedSessionKeys();return currentPlan.sessions.find(s=>!done.has(String((+s.week||1)+"-"+(s.session_code||s.session||""))))||null;}
-function assessRecentTraining(){
-  const recent=(runs||[]).slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,3);
-  const pain=recent.reduce((m,r)=>Math.max(m,+r.calf||0),0);
-  const fatigue=recent.reduce((m,r)=>Math.max(m,+r.fatigue||0),0);
-  const poorRecovery=recent.some(r=>String(r.recovery||"").toLowerCase()==="ruim");
-  const avgCont=recent.length?recent.reduce((s,r)=>s+(+r.continuous_min||0),0)/recent.length:0;
-  return {recent,pain,fatigue,poorRecovery,avgCont};
-}
+function getNextPlannedSession(){if(!currentPlan?.sessions?.length)return null;const done=getCompletedSessionKeys();return currentPlan.sessions.find(s=>!done.has(String((+s.week||1)+"-"+(s.session_code||s.session||""))))||null;}
+function assessRecentTraining(){const recent=(runs||[]).slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,3);return{recent,pain:recent.reduce((m,r)=>Math.max(m,+r.calf||0),0),fatigue:recent.reduce((m,r)=>Math.max(m,+r.fatigue||0),0),poorRecovery:recent.some(r=>String(r.recovery||"").toLowerCase()==="ruim")};}
 async function adaptNextWorkout(){
-  if(!user||!currentPlan||!currentPlan.sessions?.length)return;
-  const next=getNextPlannedSession(); if(!next)return;
-  const a=assessRecentTraining();
-  let mode="normal", reason="Seus últimos treinos estão compatíveis com a progressão planejada.";
-  if(a.pain>=4||a.fatigue>=4||a.poorRecovery){mode="recover";reason="O histórico recente indica maior necessidade de recuperação."}
-  else if(a.pain>=3||a.fatigue>=3){mode="reduce";reason="O histórico recente sugere reduzir a carga antes de progredir."}
-  else if(a.recent.length>=2 && a.avgCont>0){mode="progress";reason="A evolução recente permite manter uma progressão conservadora."}
-  let main=next.main_set||"Corrida confortável";
-  let intensity=next.intensity||"Confortável / controlado";
-  if(mode==="recover"){
-    main="Treino de recuperação: 15–25 min de caminhada rápida e/ou corrida muito leve, sem buscar intensidade. Se houver dor importante, não corra.";
-    intensity="Muito leve / recuperação";
-  }else if(mode==="reduce"){
-    main=main.replace(/×\d+/g,"×3").replace(/\d+ min forte/gi,"2 min controlado");
-    main="Versão reduzida: "+main+". Pare ou caminhe se a dor aumentar.";
-    intensity="Leve / controlado";
-  }else if(mode==="progress"){
-    intensity="Confortável / controlado — progressão leve";
-    main=main+". Se terminar confortável, mantenha 1–2 min finais em ritmo natural, sem sprint.";
-  }
-  const note="Adaptação automática MAOR Run: "+reason+" Motivo: "+mode+".";
-  const q=await sb.from("training_plan_sessions").update({main_set:main,intensity,notes:note,instructions:(next.instructions||"")+" "+note}).eq("id",next.id).eq("user_id",user.id);
-  if(q.error){console.error("Falha ao adaptar próxima sessão:",q.error);return}
-  const local=currentPlan.sessions.find(s=>s.id===next.id);
-  if(local){local.main_set=main;local.intensity=intensity;local.notes=note;local.instructions=(local.instructions||"")+" "+note}
+ if(!user||!currentPlan?.sessions?.length)return{changed:false};const next=getNextPlannedSession();if(!next)return{changed:false};
+ const a=assessRecentTraining();let mode="progress",reason="Seu último treino permite manter uma progressão leve.";
+ if(a.pain>=4||a.fatigue>=4||a.poorRecovery){mode="recover";reason="Dor, fadiga ou recuperação ruim detectadas: próxima sessão reduzida para recuperação.";}
+ else if(a.pain>=3||a.fatigue>=3){mode="reduce";reason="Desconforto ou fadiga moderada detectada: próxima sessão terá carga reduzida.";}
+ const base=next.notes?.match(/MAOR_BASE:([\\s\\S]*?)(?:\\n|$)/)?.[1]||next.main_set||"Corrida confortável";let main=base,intensity="Confortável / controlado — progressão leve";
+ if(mode==="recover"){main="15–25 min de caminhada rápida e/ou corrida muito leve. Sem buscar intensidade; se houver dor importante, não corra.";intensity="Muito leve / recuperação";}
+ if(mode==="reduce"){main="Versão reduzida: "+base.replace(/×\\d+/g,"×3").replace(/\\d+ min forte/gi,"2 min controlado")+". Pare ou caminhe se a dor aumentar.";intensity="Leve / controlado";}
+ const notes="MAOR_BASE:"+base;const instructions=(next.instructions||"").split("\\nMAOR_ADAPT:")[0]+"\\nMAOR_ADAPT:"+mode+"|"+reason;
+ const q=await sb.from("training_plan_sessions").update({main_set:main,intensity,notes,instructions}).eq("id",next.id).eq("user_id",user.id);
+ if(q.error){console.error("Falha ao adaptar:",q.error);return{changed:false,error:q.error};}return{changed:true,mode,reason};
 }
-
-function renderPlan(){const b=$("weeks");if(!b)return;if(!currentPlan){b.innerHTML="<div class='status'>Complete seu perfil para gerar o plano.</div>";return}$("planWeeks").value=String(currentPlan.weeks||12);$("planSummary").textContent=(profile?.target_distance_km||currentPlan.target_distance_km||5)+" km · "+(currentPlan.days_per_week||3)+" treinos/semana · "+(currentPlan.weeks||12)+" semanas · "+(profile?.available_minutes_per_session||45)+" min por sessão";const g={};(currentPlan.sessions||[]).forEach(s=>{if(!g[s.week])g[s.week]=[];g[s.week].push(s)});b.innerHTML=Object.keys(g).map(w=>"<details><summary>Semana "+w+" <span class='badge'>"+g[w].length+" treinos</span></summary>"+g[w].map(s=>"<div class='card'><b>"+s.title+"</b><p class='muted'>"+(s.scheduled_day||"Dia a definir")+" · "+s.session_type+" · até "+(s.target_duration_min||"")+" min</p><p><b>Aquecimento:</b> "+(s.warmup||"")+"</p><p><b>Principal:</b> "+(s.main_set||"")+"</p><p><b>Desaquecimento:</b> "+(s.cooldown||"")+"</p><p class='muted'>"+(s.instructions||"")+"</p></div>").join("")+"</details>").join("");}
 async function loadData(){
  const r=await sb.from("runs").select("*").order("date",{ascending:true}).order("week",{ascending:true});
  const f=await sb.from("weekly_feedback").select("*").order("week",{ascending:true});
@@ -344,7 +320,7 @@ window.deleteRun=async function(id){if(!confirm("Excluir este treino?"))return;c
 $("cancelEdit").onclick=clearRunForm;$("profileForm").onsubmit=async e=>{e.preventDefault();const st=$("profileStatus");const btn=e.submitter||$("profileForm button[type=submit]");const setStatus=(msg,ok=false)=>{st.textContent=msg;st.classList.remove("hidden");st.style.background=ok?"#ecfdf5":"#f3f4f6";st.style.color=ok?"#065f46":""};btn.disabled=true;setStatus("Salvando seu perfil…");try{const d={id:user.id,display_name:$("pf_name").value.trim()||null,age:+$("pf_age").value||null,sex:$("pf_sex").value||null,weight_kg:+$("pf_weight").value||null,height_cm:+$("pf_height").value||null,body_type:$("pf_body_type").value.trim()||null,running_experience:$("pf_exp").value,goal:$("pf_goal").value.trim()||null,target_distance_km:+$("pf_target_km").value||5,target_time_min:+$("pf_target_time").value||null,training_days_per_week:+$("pf_days").value||3,available_minutes_per_session:+$("pf_minutes").value||45,plan_weeks:+$("pf_plan_weeks").value||12,training_focus:$("pf_focus").value||"resistencia",plan_style:$("pf_style").value||"progressivo",specific_workout:$("pf_specific").value||"livre",preferred_training_time:$("pf_time").value||null,available_days:$("pf_available").value.split(",").map(x=>x.trim()).filter(Boolean),specific_pain:$("pf_pain").value.trim()||null,chronic_conditions:$("pf_conditions").value.trim()||null,medical_notes:$("pf_medical").value.trim()||null,updated_at:new Date().toISOString()};const q=await sb.from("profiles").upsert(d).select().single();if(q.error)throw new Error("Perfil: "+q.error.message);const verify=await sb.from("profiles").select("*").eq("id",user.id).single();if(verify.error)throw new Error("Verificação do perfil: "+verify.error.message);profile=verify.data;fillProfile();$("profileOnboarding").classList.add("hidden");setStatus("Perfil salvo. Gerando seu plano personalizado…");const ok=await createPlan(profile.plan_weeks);if(!ok)throw new Error("O perfil foi salvo, mas não foi possível concluir a geração do plano. Veja a mensagem acima.");await loadProfile();render();document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));$("p").classList.add("active");setStatus("Perfil e plano salvos com sucesso.",true);}catch(err){console.error("Falha ao salvar perfil:",err);setStatus("Não foi possível salvar: "+(err.message||"erro desconhecido"));}finally{btn.disabled=false}};$("regenPlan").onclick=()=>createPlan($("planWeeks").value);$("planWeeks").onchange=()=>createPlan($("planWeeks").value);$("heroWorkout")?.addEventListener("click",()=>{$("p").classList.add("active");document.querySelectorAll(".panel").forEach(x=>x.id!=="p"&&x.classList.remove("active"));scrollTo({top:0,behavior:"smooth"})});$("startToday").onclick=()=>{$("p").classList.add("active");document.querySelectorAll(".panel").forEach(x=>x.id!=="p"&&x.classList.remove("active"));scrollTo({top:0,behavior:"smooth"})};window.addEventListener("resize",drawCharts);
 $("runForm").onsubmit=async e=>{e.preventDefault();const data={user_id:user.id,date:$("date").value,week:+$("week").value,session:$("ses").value,distance_km:$("dist").value?+$("dist").value:null,total_time_min:$("time").value?+$("time").value:null,continuous_min:$("cont").value?+$("cont").value:null,calf:$("calf").value!==""?+$("calf").value:null,breathing:$("breath").value!==""?+$("breath").value:null,fatigue:$("fatigue")&&$("fatigue").value!==""?+$("fatigue").value:null,recovery:$("rec").value,notes:$("notes").value||null};
  let res=editing?await sb.from("runs").update(data).eq("id",$("runId").value):await sb.from("runs").insert(data);
- if(res.error)alert(res.error.message);else{await loadData();await adaptNextWorkout();renderPlan();render();clearRunForm();alert(editing?"Treino atualizado!":"Treino salvo!")}};
+ if(res.error)alert(res.error.message);else{await loadData();const adaptation=await adaptNextWorkout();if(adaptation.changed)await loadData();renderPlan();render();clearRunForm();alert((editing?"Treino atualizado!":"Treino salvo!")+(adaptation.changed?"\n\nMAOR Run adaptou o próximo treino.\n"+adaptation.reason:""))}};
 $("fb").onsubmit=async e=>{e.preventDefault();const data={user_id:user.id,week:+$("fw").value,runs_count:$("fr").value?+$("fr").value:null,max_continuous:$("fc").value?+$("fc").value:null,notes:$("fn").value||null};const old=feedbacks.find(x=>x.week===data.week);const res=old?await sb.from("weekly_feedback").update(data).eq("id",old.id):await sb.from("weekly_feedback").insert(data);if(res.error)alert(res.error.message);else{await loadData();$("sum").textContent="Semana "+data.week+" salva.\nTreinos: "+(data.runs_count??"")+"\nMaior contínuo: "+(data.max_continuous??"")+" min\n\n"+(data.notes||"");}};
 $("csv").onclick=()=>{const csv="data,semana,sessao,km,tempo,continuo,panturrilha,respiracao,recuperacao,observacoes\n"+runs.map(x=>[x.date,x.week,x.session,x.distance_km,x.total_time_min,x.continuous_min,x.calf,x.breathing,x.recovery,JSON.stringify(x.notes||"")].join(",")).join("\n");download("meu-5k.csv",csv,"text/csv")};
 $("bak").onclick=()=>download("meu-5k-backup.json",JSON.stringify(runs,null,2),"application/json");
